@@ -1,7 +1,7 @@
 /motion_capture_tracking:
   ros__parameters:
-    type: "optitrack"
-    hostname: "130.149.82.37"
+    type: "vicon"
+    hostname: "192.168.20.2"
 
     mode: "libobjecttracker" # one of motionCapture,libRigidBodyTracker
 
