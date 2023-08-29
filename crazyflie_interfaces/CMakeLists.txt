@@ -25,6 +25,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Position.msg"
   "msg/TrajectoryPolynomialPiece.msg"
   "msg/VelocityWorld.msg"
+  "msg/WayPoint.msg"
+  "msg/CollDetect.msg"
   "srv/GoTo.srv"
   "srv/Land.srv"
   "srv/NotifySetpointsStop.srv"
@@ -36,6 +38,10 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/UploadTrajectory.srv"
   "srv/RemoveLogging.srv"
   "srv/AddLogging.srv"
+  "srv/CA.srv"
+  "srv/InitiateWayPoint.srv"
+  "srv/ChangeWayPoint.srv"
+
   DEPENDENCIES builtin_interfaces geometry_msgs std_msgs 
   ADD_LINTER_TESTS
 )
