@@ -78,9 +78,9 @@ def generate_launch_description():
             executable='detect_avoid.py',
             name='detect_avoid',
             output='screen',
-            parameters=[{"ca_threshold1": 0.2},
-                        {"ca_threshold2": 0.4},
-                        {"avoidance_vel": 0.5},
+            parameters=[{"ca_threshold1": 0.1},
+                        {"ca_threshold2": 0.2},
+                        {"avoidance_vel": 0.2},
                         {"robot_prefix": "/cf2"}]
         ),
         Node(
@@ -116,16 +116,16 @@ def generate_launch_description():
             emulate_tty=True,
             parameters=server_params
         ),
-        Node(
-            package='rviz2',
-            namespace='',
-            executable='rviz2',
-            name='rviz2',
-            arguments=['-d' + os.path.join(get_package_share_directory('crazyflie'), 'config', 'config.rviz')],
-            parameters=[{
-                "use_sim_time": True,
-            }]
-        ),
+        # Node(
+        #     package='rviz2',
+        #     namespace='',
+        #     executable='rviz2',
+        #     name='rviz2',
+        #     arguments=['-d' + os.path.join(get_package_share_directory('crazyflie'), 'config', 'config.rviz')],
+        #     parameters=[{
+        #         "use_sim_time": True,
+        #     }]
+        # ),
     ])
 
 if __name__ == '__main__':

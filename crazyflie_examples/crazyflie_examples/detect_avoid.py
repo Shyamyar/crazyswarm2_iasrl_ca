@@ -11,7 +11,7 @@ import rclpy
 from rclpy.node import Node
 
 from crazyflie_interfaces.srv import CA
-from crazyflie_interfaces.msg import CollDetect
+from crazyflie_interfaces.msg import CollDetect, WayPoint, Position, Hover, InFlight
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import LaserScan
 from functools import partial
@@ -25,7 +25,7 @@ class DetectAndAvoid(Node):
             automatically_declare_parameters_from_overrides=True,)
         # self.declare_parameter('ca_threshold1', 0.2)
         # self.declare_parameter('ca_threshold2', 0.4)
-        # self.declare_parameter('avoidance_vel', 0.5)
+        # self.declare_parameter('avoidance_vel', 0.2)
         # self.declare_parameter('robot_prefix', '/cf2')
 
         self.ca_threshold1  = self.get_parameter('ca_threshold1').value
@@ -50,50 +50,85 @@ class DetectAndAvoid(Node):
             robot_prefix + '/scan',
             self.scan_callback,
             10)
+        self.waypoint_sub = self.create_subscription(
+            WayPoint,
+            robot_prefix + '/waypoint',
+            self.waypoint_callback,
+            10)
+        self.inflight_sub = self.create_subscription(
+            InFlight,
+            robot_prefix + '/inflight',
+            self.inflight_callback,
+            10)
 
         # Clients
         
         
         # Services
+        self.ca_choice = self.apf_ca
         self.create_service(
             CA,
             robot_prefix + "/ca", 
-            partial(self.smooth_ca))
+            partial(self.ca_choice))
 
         # Initializations
-        self.nearest = [float("inf")] * 3
-        self.nearest_dist = float("inf")
+        inf = float("inf")
+        self.nearest_inertial = [inf] * 3
+        self.nearest_relative = [inf] * 3
+        self.nearest_dist = inf
+        self.m1, self.c1 = self.vel_eq(self.avoidance_vel, 0.0, self.ca_threshold2, self.ca_threshold1) # Axial Slow down
+        self.m2, self.c2 = self.vel_eq(0.0, self.avoidance_vel, self.ca_threshold2, self.ca_threshold1) # Lateral Speed up
+        self.coll_check = False
 
         self.get_logger().info(f"Detect and Avoid set for {robot_prefix}"+
                                f" with ca_th1 = {self.ca_threshold1} m, ca_th2 = {self.ca_threshold2} m")
 
     def pose_callback(self, msg:PoseStamped):
         self.msg_pose = msg
-        cf_position = self.msg_pose.pose.position
-        self.cf_inertial = [cf_position.x, cf_position.y, cf_position.z]
+        self.cf_position = msg.pose.position
+        self.cf_inertial = [self.cf_position.x, self.cf_position.y, self.cf_position.z]
+
+    def waypoint_callback(self, msg:WayPoint):
+        self.msg_wp = msg
+        self.wp = msg.pose
+        self.wp_inertial = [self.wp.x, self.wp.y, self.wp.z]
+        self.wp_relative, self.wp_relative_array = self.inertial2relative(self.wp_inertial)
+        self.wp_dist = float(np.linalg.norm(self.wp_relative_array))
+
+    def inflight_callback(self, msg:InFlight):
+        self.msg_inflight = msg
 
     def scan_callback(self, msg:LaserScan):
         self.msg_scan = msg
         ranges = list(msg.ranges)
-        coll_check_ranges = [i <= self.ca_threshold2 for i in ranges] # Collision check via ranges
-        self.nearest_range = min(ranges)
-        self.nearest_range_index = ranges.index(self.nearest_range)
-        self.current_nearest = self.range_inertial(self.nearest_range, self.nearest_range_index)
-        self.nearest, self.nearest_dist = self.compare_nearest(self.current_nearest, self.nearest)
-        coll_check = any(coll_check_ranges)
-        # coll_check = self.nearest_dist <= self.ca_threshold2 # Collision check via nearest sensed obs pt.
+        
+        if self.msg_inflight.inflight:
+            self.nearest_range = min(ranges)
+            self.nearest_range_index = ranges.index(self.nearest_range)
+            self.nearest_range_relative = self.range_relative(self.nearest_range, self.nearest_range_index)
+            self.nearest_range_inertial = self.relative2inertial(self.nearest_range_relative)        
+            if any(self.ca_choice == i for i in [self.repel_ca, self.repel_ca2, self.smooth_ca]):
+                self.nearest_relative = self.nearest_range_relative
+                self.nearest_inertial = self.nearest_range_inertial
+                self.nearest_dist = self.nearest_range
+            else:
+                self.nearest_inertial, self.nearest_relative, self.nearest_dist = self.compare_nearest(self.nearest_range_inertial, self.nearest_inertial)
+                
+            self.coll_check = self.nearest_dist <= self.ca_threshold2 # Collision check via nearest sensed obs pt.
 
-        msg_collision = CollDetect()
-        msg_collision.nearest = self.current_nearest
-        if coll_check:
-            msg_collision.collision = True
-        else:
-            msg_collision.collision = False
-        self.publisher_collision.publish(msg_collision)
+            msg_collision = CollDetect()
+            msg_collision.nearest = self.nearest_relative
+            if self.coll_check and self.msg_inflight.inflight:
+                self.get_logger().warn("Something in collision range.")
+                msg_collision.collision = True
+            else:
+                msg_collision.collision = False
+            self.publisher_collision.publish(msg_collision)
 
     def repel_ca(self, request, response):
         old_hover = request.old_hover
         new_hover = old_hover
+        new_hover = self.set_hover_z(new_hover)
         vel_avoid = self.avoidance_vel
         new_hover.vx = 0.0
         new_hover.vy = 0.0
@@ -116,33 +151,31 @@ class DetectAndAvoid(Node):
     def repel_ca2(self, request, response):
         old_hover = request.old_hover
         new_hover = old_hover
-        vel_avoid = self.avoidance_vel
+        new_hover = self.set_hover_z(new_hover)
         new_hover.vx = 0.0
         new_hover.vy = 0.0
         new_hover.yaw_rate = 0.0
 
-        x = self.nearest[0] # x axis, -x is back, +x is front
-        y = self.nearest[1] # y axis, -y is right, +y is left
-        new_hover.vx = - vel_avoid * float(np.sign(x))
-        new_hover.vy = - vel_avoid * float(np.sign(y))
+        x = self.nearest_relative[0] # x axis, - is back, + is front
+        y = self.nearest_relative[1] # y axis, - is right, + is left
+        new_hover.vx = - self.avoidance_vel * float(np.sign(x))
+        new_hover.vy = - self.avoidance_vel * float(np.sign(y))
 
         response.new_hover = new_hover
 
-        self.get_logger().info("Repel CA engaged.")
+        self.get_logger().info("Repel CA2 engaged.")
         return response
 
-    def smooth_ca(self, request, response):
+    def smooth_ca(self, request, response): # Best performance till now with ca1 = 0.2 and ca2 = 0.4
         old_hover = request.old_hover
         new_hover = old_hover
-        vel_avoid = self.avoidance_vel
-        m1, c1 = self.vel_eq(vel_avoid, 0.0, self.ca_threshold2, self.ca_threshold1)
-        m2, c2 = self.vel_eq(0.0, vel_avoid, self.ca_threshold2, self.ca_threshold1)
+        new_hover = self.set_hover_z(new_hover)
 
-        axial_speed = self.smooth_vel_change(self.nearest_range, m1, c1)
-        lateral_speed = self.smooth_vel_change(self.nearest_range, m2, c2)
+        axial_speed = self.smooth_vel_change(self.nearest_dist, self.m1, self.c1)
+        lateral_speed = self.smooth_vel_change(self.nearest_dist, self.m2, self.c2)
         if self.nearest_range_index == 0: # back
             new_hover.vx = -axial_speed
-            new_hover.vy = lateral_speed
+            new_hover.vy = -lateral_speed
         if self.nearest_range_index == 1: # right
             new_hover.vx = lateral_speed
             new_hover.vy = -axial_speed
@@ -150,7 +183,7 @@ class DetectAndAvoid(Node):
             new_hover.vx = axial_speed
             new_hover.vy = lateral_speed
         if self.nearest_range_index == 3: # left
-            new_hover.vx = lateral_speed
+            new_hover.vx = -lateral_speed
             new_hover.vy = axial_speed
 
         response.new_hover = new_hover
@@ -158,30 +191,150 @@ class DetectAndAvoid(Node):
         self.get_logger().info("Smooth CA engaged.")
         return response
 
-    def range_inertial(self, rangex, index):
-        if index == 0: # back
-            range_relative = [0, 0, -rangex]
-        elif index == 1: # right
-            range_relative = [-rangex, 0, 0]
-        elif index == 2: # front
-            range_relative = [0, 0, rangex]
-        elif index == 3: # left
-            range_relative = [rangex, 0, 0]                                   
+    def smooth_ca2(self, request, response):
+        old_hover = request.old_hover
+        new_hover = old_hover
+        new_hover = self.set_hover_z(new_hover)
 
-        range_inertial = [range_relative[i] + self.cf_inertial[i] for i in range(len(self.cf_inertial))]
+        axial_speed = self.smooth_vel_change(self.nearest_dist, self.m1, self.c1)
+        lateral_speed = self.smooth_vel_change(self.nearest_dist, self.m2, self.c2)
+        x = self.nearest_relative[0] # x axis, - is back, + is front
+        y = self.nearest_relative[1] # y axis, - is right, + is left
+        theta = math.atan2(y, x)
 
-        return range_inertial
+        # Method 1 - oscillating in one position (local minima situation)
+        # new_hover.vx = float(np.sign(x)) * axial_speed
+        # new_hover.vy = float(np.sign(y)) * lateral_speed
+
+        # Method 2 - better with 3, than 1 and 3 standalone or combined
+        # if x < 0: # back
+        #     new_hover.vx = float(np.sign(x)) * axial_speed
+        #     new_hover.vy = float(np.sign(self.wp.y)) * lateral_speed
+        # if y < 0: # right
+        #     new_hover.vx = float(np.sign(self.wp.x)) * lateral_speed
+        #     new_hover.vy = float(np.sign(y)) * axial_speed
+        # if x > 0: # front
+        #     new_hover.vx = float(np.sign(x)) * axial_speed
+        #     new_hover.vy = float(np.sign(self.wp.y)) * lateral_speed
+        # if y > 0: # left
+        #     new_hover.vx = float(np.sign(self.wp.x)) * lateral_speed
+        #     new_hover.vy = float(np.sign(y)) * axial_speed
+
+        # Method 3 (with 1) - Better than just 1 (still has certain local minimum situations)
+        # if abs(x) < abs(y):
+        #     new_hover.vy = float(np.sign(self.wp.y)) * lateral_speed
+        # else:
+        #     new_hover.vx = float(np.sign(self.wp.x)) * lateral_speed
+
+        # Method 4 - Collision happened; y direction attration
+        # new_hover.vx = self.avoidance_vel * math.cos(theta - math.pi/2)
+        # new_hover.vy = self.avoidance_vel * math.sin(theta - math.pi/2)
+
+        # # Method 5 - Similar to smooth_ca but with nearest obstacle in memory 
+        if abs(x) < abs(y) and x < 0: # back
+            new_hover.vx = -axial_speed
+            new_hover.vy = -lateral_speed
+        if abs(y) < abs(x) and y < 0: # right
+            new_hover.vx = lateral_speed
+            new_hover.vy = -axial_speed
+        if abs(x) < abs(y) and x > 0: # front
+            new_hover.vx = axial_speed
+            new_hover.vy = lateral_speed
+        if abs(y) < abs(x) and y > 0: # left
+            new_hover.vx = -lateral_speed
+            new_hover.vy = axial_speed
+
+        response.new_hover = new_hover
+
+        self.get_logger().info("Smooth CA2 engaged.")
+        return response
     
-    def compare_nearest(self, pos1, pos2):
-        pos1_rel = np.array([pos1[i] - self.cf_inertial[i] for i in range(len(self.cf_inertial))])
-        pos2_rel = np.array([pos2[i] - self.cf_inertial[i] for i in range(len(self.cf_inertial))])
-        pos1_reldist = np.linalg.norm(pos1_rel)
-        pos2_reldist = np.linalg.norm(pos2_rel)
+    def apf_ca(self, request, response): # best settings in comments
+        old_hover = request.old_hover
+        new_hover = old_hover
+        new_hover = self.set_hover_z(new_hover)
+        x = self.nearest_relative[0] # x axis, - is back, + is front
+        y = self.nearest_relative[1] # y axis, - is right, + is left
+        rho_h = math.atan2(y, x)
+
+        ka = 0.15 # 0.15
+        kr = 0.0001 # 0.0001
+        ng = 2
+        n = 2
+        do = self.ca_threshold2 # with ca1 = 0.1 and ca2 = 0.2
+        dr = max(min(self.nearest_dist, do), self.ca_threshold1)
+        da = self.wp_dist
+        unit_direction_nearest = np.array(self.nearest_relative) / dr
+        unit_direction_wp = np.array(self.wp_relative_array) / da
+        gamma = math.pi / 4
+        alpha = 1
+
+        R_1 = np.array([[np.cos(gamma),-np.sin(gamma), 0],
+                        [np.sin(gamma), np.cos(gamma), 0],
+                        [0            , 0            , 1]])
+        
+        R_2 = np.array([[ np.cos(gamma), 0, np.sin(gamma)],
+                        [ 0            , 1,             0],
+                        [-np.sin(gamma), 0, np.cos(gamma)]])
+
+        if rho_h >= 0:
+            R_h = R_1
+            R_v = np.transpose(R_2)
+        else:
+            R_h = np.transpose(R_1)
+            R_v = R_2
+
+        p_h = np.matmul(R_h, np.array(self.nearest_relative))
+        p_v = np.matmul(R_v, np.array(self.nearest_relative))
+        p = np.array([[alpha * p_h[0]], 
+                      [alpha * p_h[1]], 
+                      [(1-alpha) * p_v[3]]])
+        unit_p = p / np.linalg.norm(p)
+        
+        fa = ka * da * unit_direction_wp
+        fr_o = -kr * (da**ng / dr**2) * (((1/dr) - (1/do))**(n-1)) * unit_p
+        fr_g = (n/2) * kr * da**(ng-1)  * (((1/dr) - (1/do))**n) * unit_direction_wp
+        fr = fr_o + fr_g
+        fc = fa + fr
+
+        new_hover.vx = max(min(fc[0], self.avoidance_vel), -self.avoidance_vel)
+        new_hover.vy = max(min(fc[1], self.avoidance_vel), -self.avoidance_vel)
+
+        response.new_hover = new_hover
+
+        self.get_logger().info("Smooth CA2 engaged.")
+        return response
+    
+    def set_hover_z(self, msg_hover: Hover):
+        try:
+            msg_hover.z_distance = self.msg_wp.pose.z
+        except Exception as e:
+            msg_hover.z_distance = self.cf_position.z
+
+        return msg_hover
+
+    def range_relative(self, rangex, index):
+        if index == 0: # back
+            range_relative = [0.0, 0.0,-rangex]
+        elif index == 1: # right
+            range_relative = [-rangex, 0.0, 0.0]
+        elif index == 2: # front
+            range_relative = [0.0, 0.0, rangex]
+        elif index == 3: # left
+            range_relative = [rangex, 0.0, 0.0]                                   
+
+        return range_relative
+    
+    def compare_nearest(self, pos1, pos2): # Overwrites the nearest obs in memory
+        pos1_rel, pos1_rel_array = self.inertial2relative(pos1)
+        pos2_rel, pos2_rel_array = self.inertial2relative(pos2)
+        pos1_reldist = np.linalg.norm(pos1_rel_array)
+        pos2_reldist = np.linalg.norm(pos2_rel_array)
 
         if pos1_reldist < pos2_reldist:
-            return pos1, float(pos1_reldist)
+            return pos1, pos1_rel_array, float(pos1_reldist)
         else:
-            return pos2, float(pos2_reldist)
+            return pos2, pos2_rel_array, float(pos2_reldist)
         
     def smooth_vel_change(self, dist, m, c):
         v = m * dist + c
@@ -193,6 +346,26 @@ class DetectAndAvoid(Node):
         c = v1 - m * x1
 
         return m, c
+    
+    def inertial2relative(self, pos):
+        pos_rel_array = np.array([pos[i] - self.cf_inertial[i] for i in range(len(self.cf_inertial))])
+        pos_rel = Position()
+        pos_rel.x = pos_rel_array[0]
+        pos_rel.y = pos_rel_array[1]
+        pos_rel.z = pos_rel_array[2]
+        pos_rel.yaw = math.atan2(pos_rel.y, pos_rel.z)
+
+        return pos_rel, list(pos_rel_array)
+
+    def relative2inertial(self, pos_rel):
+        pos_inertial_array = np.array([pos_rel[i] + self.cf_inertial[i] for i in range(len(self.cf_inertial))])
+        pos_inertial = Position()
+        pos_inertial.x = pos_inertial_array[0]
+        pos_inertial.y = pos_inertial_array[1]
+        pos_inertial.z = pos_inertial_array[2]
+        pos_inertial.yaw = math.atan2(pos_inertial.y, pos_inertial.z)
+
+        return list(pos_inertial_array)
 
 def main(args=None):
     rclpy.init(args=args)

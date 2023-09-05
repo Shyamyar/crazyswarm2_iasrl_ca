@@ -22,7 +22,7 @@ class WaypointGenerator(Node):
         super().__init__('waypoint_gen',
             allow_undeclared_parameters=True,
             automatically_declare_parameters_from_overrides=True,)
-        self.declare_parameter('robot_prefix', '/cf2')
+        # self.declare_parameter('robot_prefix', '/cf2')
 
         robot_prefix  = self.get_parameter('robot_prefix').value
 
@@ -55,8 +55,8 @@ class WaypointGenerator(Node):
 
         # Initializations
         self.waypoints = []
-        self.waypoints = [[0.5,-0.4, 0.7, 0.1],
-                          [0.0, 0.0, 0.3, 0.0]]       
+        self.waypoints = [[ 0.8,-0.1, 0.5, 0.0],
+                          [-0.5, 0.0, 0.5, 0.0]]       
         self.num_wp = len(self.waypoints)
         self.waypoint_id = 0
         self.wp_reached = False
