@@ -23,8 +23,8 @@ class DetectAndAvoid(Node):
         super().__init__('detect_avoid',
             allow_undeclared_parameters=True,
             automatically_declare_parameters_from_overrides=True,)
-        # self.declare_parameter('ca_threshold1', 0.2)
-        # self.declare_parameter('ca_threshold2', 0.4)
+        # self.declare_parameter('ca_threshold1', 0.1)
+        # self.declare_parameter('ca_threshold2', 0.2)
         # self.declare_parameter('avoidance_vel', 0.2)
         # self.declare_parameter('robot_prefix', '/cf2')
 
@@ -107,7 +107,7 @@ class DetectAndAvoid(Node):
             self.nearest_range_index = ranges.index(self.nearest_range)
             self.nearest_range_relative = self.range_relative(self.nearest_range, self.nearest_range_index)
             self.nearest_range_inertial = self.relative2inertial(self.nearest_range_relative)        
-            if any(self.ca_choice == i for i in [self.repel_ca, self.repel_ca2, self.smooth_ca]):
+            if any(self.ca_choice == i for i in [self.repel_ca, self.repel_ca2, self.smooth_ca, self.apf_ca]):
                 self.nearest_relative = self.nearest_range_relative
                 self.nearest_inertial = self.nearest_range_inertial
                 self.nearest_dist = self.nearest_range
@@ -226,30 +226,30 @@ class DetectAndAvoid(Node):
         # else:
         #     new_hover.vx = float(np.sign(self.wp.x)) * lateral_speed
 
-        # Method 4 - Collision happened; y direction attration
-        # new_hover.vx = self.avoidance_vel * math.cos(theta - math.pi/2)
-        # new_hover.vy = self.avoidance_vel * math.sin(theta - math.pi/2)
+        # Method 4 - makes circles around the obstacle, performs well.
+        new_hover.vx = self.avoidance_vel * math.cos(theta - math.pi/2)
+        new_hover.vy = self.avoidance_vel * math.sin(theta - math.pi/2)
 
         # # Method 5 - Similar to smooth_ca but with nearest obstacle in memory 
-        if abs(x) < abs(y) and x < 0: # back
-            new_hover.vx = -axial_speed
-            new_hover.vy = -lateral_speed
-        if abs(y) < abs(x) and y < 0: # right
-            new_hover.vx = lateral_speed
-            new_hover.vy = -axial_speed
-        if abs(x) < abs(y) and x > 0: # front
-            new_hover.vx = axial_speed
-            new_hover.vy = lateral_speed
-        if abs(y) < abs(x) and y > 0: # left
-            new_hover.vx = -lateral_speed
-            new_hover.vy = axial_speed
+        # if abs(x) < abs(y) and x < 0: # back
+        #     new_hover.vx = -axial_speed
+        #     new_hover.vy = -lateral_speed
+        # if abs(y) < abs(x) and y < 0: # right
+        #     new_hover.vx = lateral_speed
+        #     new_hover.vy = -axial_speed
+        # if abs(x) < abs(y) and x > 0: # front
+        #     new_hover.vx = axial_speed
+        #     new_hover.vy = lateral_speed
+        # if abs(y) < abs(x) and y > 0: # left
+        #     new_hover.vx = -lateral_speed
+        #     new_hover.vy = axial_speed
 
         response.new_hover = new_hover
 
         self.get_logger().info("Smooth CA2 engaged.")
         return response
     
-    def apf_ca(self, request, response): # best settings in comments
+    def apf_ca(self, request, response): # best settings in comments, worked well when nearest not stored
         old_hover = request.old_hover
         new_hover = old_hover
         new_hover = self.set_hover_z(new_hover)
@@ -257,8 +257,8 @@ class DetectAndAvoid(Node):
         y = self.nearest_relative[1] # y axis, - is right, + is left
         rho_h = math.atan2(y, x)
 
-        ka = 0.15 # 0.15
-        kr = 0.0001 # 0.0001
+        ka = 0.3 # 0.3
+        kr = 0.01 # 0.01
         ng = 2
         n = 2
         do = self.ca_threshold2 # with ca1 = 0.1 and ca2 = 0.2
@@ -266,6 +266,7 @@ class DetectAndAvoid(Node):
         da = self.wp_dist
         unit_direction_nearest = np.array(self.nearest_relative) / dr
         unit_direction_wp = np.array(self.wp_relative_array) / da
+        
         gamma = math.pi / 4
         alpha = 1
 
@@ -286,9 +287,9 @@ class DetectAndAvoid(Node):
 
         p_h = np.matmul(R_h, np.array(self.nearest_relative))
         p_v = np.matmul(R_v, np.array(self.nearest_relative))
-        p = np.array([[alpha * p_h[0]], 
-                      [alpha * p_h[1]], 
-                      [(1-alpha) * p_v[3]]])
+        p = np.array([alpha * p_h[0], 
+                      alpha * p_h[1], 
+                      (1-alpha) * p_v[2]])
         unit_p = p / np.linalg.norm(p)
         
         fa = ka * da * unit_direction_wp
@@ -302,7 +303,7 @@ class DetectAndAvoid(Node):
 
         response.new_hover = new_hover
 
-        self.get_logger().info("Smooth CA2 engaged.")
+        self.get_logger().info("APF CA engaged.")
         return response
     
     def set_hover_z(self, msg_hover: Hover):
@@ -315,13 +316,13 @@ class DetectAndAvoid(Node):
 
     def range_relative(self, rangex, index):
         if index == 0: # back
-            range_relative = [0.0, 0.0,-rangex]
-        elif index == 1: # right
             range_relative = [-rangex, 0.0, 0.0]
+        elif index == 1: # right
+            range_relative = [0.0, -rangex, 0.0]
         elif index == 2: # front
-            range_relative = [0.0, 0.0, rangex]
+            range_relative = [rangex, 0.0, 0.0]
         elif index == 3: # left
-            range_relative = [rangex, 0.0, 0.0]                                   
+            range_relative = [0.0, rangex, 0.0]                                   
 
         return range_relative
     
@@ -347,7 +348,7 @@ class DetectAndAvoid(Node):
 
         return m, c
     
-    def inertial2relative(self, pos):
+    def inertial2relative(self, pos): # assuming yaw is at zero
         pos_rel_array = np.array([pos[i] - self.cf_inertial[i] for i in range(len(self.cf_inertial))])
         pos_rel = Position()
         pos_rel.x = pos_rel_array[0]
@@ -357,7 +358,7 @@ class DetectAndAvoid(Node):
 
         return pos_rel, list(pos_rel_array)
 
-    def relative2inertial(self, pos_rel):
+    def relative2inertial(self, pos_rel): # assuming yaw is at zero
         pos_inertial_array = np.array([pos_rel[i] + self.cf_inertial[i] for i in range(len(self.cf_inertial))])
         pos_inertial = Position()
         pos_inertial.x = pos_inertial_array[0]

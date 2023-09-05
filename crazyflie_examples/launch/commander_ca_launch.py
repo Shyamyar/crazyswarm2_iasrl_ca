@@ -78,8 +78,8 @@ def generate_launch_description():
             executable='detect_avoid.py',
             name='detect_avoid',
             output='screen',
-            parameters=[{"ca_threshold1": 0.1},
-                        {"ca_threshold2": 0.2},
+            parameters=[{"ca_threshold1": 0.2},
+                        {"ca_threshold2": 0.4},
                         {"avoidance_vel": 0.2},
                         {"robot_prefix": "/cf2"}]
         ),
