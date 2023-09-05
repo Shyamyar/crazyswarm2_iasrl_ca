@@ -27,6 +27,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/VelocityWorld.msg"
   "msg/WayPoint.msg"
   "msg/CollDetect.msg"
+  "msg/InFlight.msg"
   "srv/GoTo.srv"
   "srv/Land.srv"
   "srv/NotifySetpointsStop.srv"

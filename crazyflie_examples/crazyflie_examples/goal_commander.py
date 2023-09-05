@@ -14,7 +14,7 @@ from rclpy.node import Node
 
 from geometry_msgs.msg import Twist
 from crazyflie_interfaces.srv import Takeoff, Land, GoTo, NotifySetpointsStop, CA, InitiateWayPoint, ChangeWayPoint
-from crazyflie_interfaces.msg import Hover, CollDetect, WayPoint
+from crazyflie_interfaces.msg import Hover, CollDetect, WayPoint, InFlight
 from geometry_msgs.msg import PoseStamped
 from functools import partial
 import time
@@ -38,6 +38,10 @@ class GoalCommander(Node):
         self.publisher_hover = self.create_publisher(
             Hover, 
             robot_prefix + '/cmd_hover', 
+            10)
+        self.publisher_inflight = self.create_publisher(
+            InFlight, 
+            robot_prefix + '/inflight', 
             10)
 
         # Subscriptions
@@ -90,6 +94,7 @@ class GoalCommander(Node):
 
         # Initializations
         self.msg_hover = Hover()
+        self.inflight = False
         self.cf_has_taken_off = False
         self.command_hover = False
         self.command_takeoff = False
@@ -97,10 +102,14 @@ class GoalCommander(Node):
         self.command_land = False
         self.in_goto_mode = False
         self.ca_on = True
-        self.VELOCITY = 0.5 # m/s
-        self.LANDVELOCITY = 0.2 # m/s
+        self.VELOCITY = 0.2 # m/s
+        self.TAKEOFFVELOCITY = 0.5 # m/s
+        self.LANDVELOCITY = 0.02 # m/s
         self.land_z = 0.1   # m
         self.z_limit = 2.0   # m
+
+        self.msg_collision = CollDetect()
+        self.msg_collision.collision = False
 
         timer_period = 0.1 # Same as for /scan
         self.timer = self.create_timer(timer_period, self.timer_callback)
@@ -122,6 +131,9 @@ class GoalCommander(Node):
     def pose_callback(self, msg:PoseStamped):
         self.msg_pose = msg
         self.z_position = msg.pose.position.z
+        msg_inflight = InFlight()
+        msg_inflight.inflight = self.inflight
+        self.publisher_inflight.publish(msg_inflight)
 
     def coll_detect_callback(self, msg:CollDetect):
         self.msg_collision = msg
@@ -150,14 +162,15 @@ class GoalCommander(Node):
         if self.command_takeoff and not self.cf_has_taken_off:
             req = Takeoff.Request()
             req.height = self.hover_height
-            takeoff_duration = self.hover_height / self.VELOCITY
+            takeoff_duration = self.hover_height / self.TAKEOFFVELOCITY
             req.duration = rclpy.duration.Duration(seconds=takeoff_duration).to_msg()
             self.get_logger().info("Requesting Takeoff...")
             self.takeoff_client.call_async(req)
             self.command_takeoff = False
             self.cf_has_taken_off = True
-            self.command_stopandhover = True
+            self.command_stopandhover = False
             self.msg_hover.z_distance = self.hover_height
+            self.inflight = True
             time.sleep(2.0)
 
             if self.msg_waypoint.num > 0:
@@ -187,13 +200,14 @@ class GoalCommander(Node):
                 future.add_done_callback(partial(self.ca_client_callback))
                 self.command_goto = False
                 self.command_stopandhover = True
+                self.msg_collision.collision = False
 
             elif self.command_hover:
                 self.in_goto_mode = False
                 if self.command_goup:
                     self.msg_hover.z_distance += 0.1
                 elif self.command_godown:
-                    self.msg_hover.z_distance -= 0.1
+                    self.msg_hover.z_distance -= 0.05
                 self.msg_hover.z_distance = min(max(self.msg_hover.z_distance, self.land_z), self.z_limit)
                 self.get_logger().info("Publishing Hover...")
                 self.publisher_hover.publish(self.msg_hover)
@@ -208,8 +222,7 @@ class GoalCommander(Node):
                 self.publisher_hover.publish(self.msg_hover)
                 if self.msg_waypoint.num > 0:
                     req = NotifySetpointsStop.Request()
-                    req.remain_valid_millisecs = 50
-                    # self.command_stopandhover = False
+                    req.remain_valid_millisecs = 100
                     self.get_logger().info("Requesting Notify Setpoints Stop...")
                     self.notifysps_client.call_async(req)
                     self.command_goto = True
@@ -238,11 +251,7 @@ class GoalCommander(Node):
             
             if self.command_land or (self.msg_waypoint.goal_reached and not self.first_waypoint):
                 self.in_goto_mode = False
-                if self.msg_waypoint.goal_reached:
-                    self.get_logger().info("In goal reached landing mode.")
-                    land_height = self.z_position
-                else:
-                    land_height = self.land_z
+                land_height = self.land_z
                 land_duration = land_height / self.LANDVELOCITY
                 req = Land.Request()
                 req.height = land_height
@@ -250,6 +259,7 @@ class GoalCommander(Node):
                 self.get_logger().info("Requesting Land...")
                 self.land_client.call_async(req)
                 self.cf_has_taken_off = False
+                self.inflight = False
 
     def set_zero_hover(self, msg:Hover):
         msg.vx = 0.0
@@ -262,7 +272,7 @@ class GoalCommander(Node):
         try:
             response = future.result()
             self.msg_hover = response.new_hover
-            self.msg_hover.z_distance = self.z_position
+            # self.msg_hover.z_distance = self.z_position
             if not self.command_land:
                 self.get_logger().info("Publishing CA Hover...")
                 self.publisher_hover.publish(self.msg_hover)
