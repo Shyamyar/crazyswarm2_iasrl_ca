@@ -17,14 +17,15 @@ from functools import partial
 import tf_transformations
 import numpy as np
 
-class WaypointGenerator(Node):
-    def __init__(self):
+class WaypointGenerator(Node,):
+    def __init__(self, cf_num):
         super().__init__('waypoint_gen',
             allow_undeclared_parameters=True,
             automatically_declare_parameters_from_overrides=True,)
         # self.declare_parameter('robot_prefix', '/cf2')
 
-        robot_prefix  = self.get_parameter('robot_prefix').value
+        robot_prefixes  = self.get_parameter('robot_prefix').value
+        robot_prefix = robot_prefixes[cf_num]
 
         # Publishers
         self.publisher_waypoint = self.create_publisher(
@@ -139,7 +140,8 @@ class WaypointGenerator(Node):
 def main(args=None):
     rclpy.init(args=args)
 
-    waypoint_gen = WaypointGenerator()
+    cf_num = 0
+    waypoint_gen = WaypointGenerator(cf_num)
 
     rclpy.spin(waypoint_gen)
 

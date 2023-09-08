@@ -22,7 +22,7 @@ import numpy as np
 import random as rd
 
 class GoalCommander(Node):
-    def __init__(self):
+    def __init__(self, cf_num):
         super().__init__('goal_commander',
             allow_undeclared_parameters=True,
             automatically_declare_parameters_from_overrides=True,)
@@ -32,7 +32,8 @@ class GoalCommander(Node):
 
         self.hover_height  = self.get_parameter('hover_height').value
         incoming_twist_topic  = self.get_parameter('incoming_twist_topic').value
-        robot_prefix  = self.get_parameter('robot_prefix').value
+        robot_prefixes  = self.get_parameter('robot_prefix').value
+        robot_prefix = robot_prefixes[cf_num]
         
         # Publishers
         self.publisher_hover = self.create_publisher(
@@ -284,8 +285,9 @@ class GoalCommander(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-
-    goal_commander = GoalCommander()
+    
+    cf_num = 0
+    goal_commander = GoalCommander(cf_num)
 
     rclpy.spin(goal_commander)
 

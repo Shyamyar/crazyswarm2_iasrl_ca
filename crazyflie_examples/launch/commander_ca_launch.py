@@ -41,9 +41,11 @@ def generate_launch_description():
 
     motion_capture_params = motion_capture["/motion_capture_tracking"]["ros__parameters"]
     motion_capture_params["rigid_bodies"] = dict()
+    enabled_cf = list()
     for key, value in crazyflies["robots"].items():
         type = crazyflies["robot_types"][value["type"]]
         if value["enabled"] and type["motion_capture"]["enabled"]:
+            enabled_cf.append(key)
             motion_capture_params["rigid_bodies"][key] =  {
                     "initial_position": value["initial_position"],
                     "marker": type["motion_capture"]["marker"],
@@ -71,7 +73,7 @@ def generate_launch_description():
             output='screen',
             parameters=[{"hover_height": 0.5},
                         {"incoming_twist_topic": "/cmd_vel"},
-                        {"robot_prefix": "/cf2"}]
+                        {"robot_prefix": enabled_cf}]
         ),
         Node(
             package='crazyflie_examples',
@@ -81,14 +83,14 @@ def generate_launch_description():
             parameters=[{"ca_threshold1": 0.2},
                         {"ca_threshold2": 0.4},
                         {"avoidance_vel": 0.2},
-                        {"robot_prefix": "/cf2"}]
+                        {"robot_prefix": enabled_cf}]
         ),
         Node(
             package='crazyflie_examples',
             executable='waypoint_gen.py',
             name='waypoint_gen',
             output='screen',
-            parameters=[{"robot_prefix": "/cf2"}]
+            parameters=[{"robot_prefix": enabled_cf}]
         ),
         Node(
             package='crazyflie',
