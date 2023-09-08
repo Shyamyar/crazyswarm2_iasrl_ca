@@ -56,7 +56,7 @@ class WaypointGenerator(Node,):
 
         # Initializations
         self.waypoints = []
-        self.waypoints = [[ 1.0,-0.1, 0.5, 0.0],
+        self.waypoints = [[ 1.0, 0.0, 0.5, 0.0],
                           [-0.5, 0.0, 0.5, 0.0]]       
         self.num_wp = len(self.waypoints)
         self.waypoint_id = 0

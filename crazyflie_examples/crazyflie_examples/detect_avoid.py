@@ -104,23 +104,34 @@ class DetectAndAvoid(Node):
         ranges = list(msg.ranges)
         
         if self.msg_inflight.inflight:
-            self.nearest_range = min(ranges)
-            self.nearest_range_index = ranges.index(self.nearest_range)
+            nearest_range = min(ranges)
+            self.nearest_range = max(nearest_range, self.msg_scan.range_min) # Avoid zero division error
+            self.nearest_range_index = ranges.index(nearest_range)
             self.nearest_range_relative = self.range_relative(self.nearest_range, self.nearest_range_index)
             self.nearest_range_inertial = self.relative2inertial(self.nearest_range_relative)
-            if any(self.ca_choice == i for i in [self.repel_ca, self.repel_ca2, self.smooth_ca, self.apf_ca]):
+                
+            self.nearest_relative = self.inertial2relative(self.nearest_inertial)
+            self.nearest_dist = self.dist2pos(self.nearest_relative) # Consider previous nearest
+            # self.nearest_dist = self.nearest_range # Only consider sensed nearest
+            if self.nearest_range <= self.nearest_dist:
+                self.get_logger().warn(f"Nearest range: [{self.nearest_range}, {self.nearest_range_index}].")
                 self.nearest_relative = self.nearest_range_relative
                 self.nearest_inertial = self.nearest_range_inertial
                 self.nearest_dist = self.nearest_range
-            else:
-                self.nearest_inertial, self.nearest_relative, self.nearest_dist = self.compare_nearest(self.nearest_range_inertial, self.nearest_inertial)
 
-            self.coll_check = self.nearest_dist <= self.ca_threshold2 # Collision check via nearest sensed obs pt.
+            # if any(self.ca_choice == i for i in [self.repel_ca, self.repel_ca2, self.smooth_ca, self.apf_ca]):
+            #     self.nearest_relative = self.nearest_range_relative
+            #     self.nearest_inertial = self.nearest_range_inertial
+            #     self.nearest_dist = self.nearest_range
+            # else:
+            #     self.nearest_inertial, self.nearest_relative, self.nearest_dist = self.compare_nearest(self.nearest_range_inertial, self.nearest_inertial)
+
+            self.coll_check = self.nearest_dist <= self.ca_threshold2 # Collision check via nearest obs pt.
 
             msg_collision = CollDetect()
             msg_collision.nearest = self.nearest_relative
             if self.coll_check:
-                self.get_logger().warn(f"Nearest collision point at [{self.nearest_dist}, {self.nearest_range_index}]")
+                self.get_logger().warn(f"Nearest collision at {self.nearest_dist}.")
                 self.get_logger().warn(f"Obs inertially at: " +
                                        f"obs_x = {self.nearest_inertial[0]}, " +
                                        f"obs_y = {self.nearest_inertial[1]}, ")
@@ -263,7 +274,7 @@ class DetectAndAvoid(Node):
         new_hover = self.set_hover_z(new_hover)
         x = self.nearest_relative[0] # x axis, - is back, + is front
         y = self.nearest_relative[1] # y axis, - is right, + is left
-        rho_h = math.atan2(y, x)
+        rho_h = math.atan2(abs(y), x)
 
         ka = 0.3 # 0.3
         kr = 0.01 # 0.01
@@ -301,8 +312,8 @@ class DetectAndAvoid(Node):
         unit_p = p / max(min(self.dist2pos(p), self.nearest_dist), -self.nearest_dist)
         
         fa = ka * da * unit_direction_wp
-        fr_o = -kr * (da**ng / dr**2) * (((1/dr) - (1/do))**(n-1)) * unit_p
-        fr_g = (n/2) * kr * da**(ng-1)  * (((1/dr) - (1/do))**n) * unit_direction_wp
+        fr_o = -(1/2) * kr * (da**ng / dr**2) * n * (((1/dr) - (1/do))**(n-1)) * unit_p
+        fr_g = -(1/2) * kr * ng * da**(ng-1)  * (((1/dr) - (1/do))**n) * unit_direction_wp
         fr = fr_o + fr_g
         fc = fa + fr
 
@@ -331,7 +342,7 @@ class DetectAndAvoid(Node):
         elif index == 2: # front
             range_relative = [rangex, 0.0, 0.0]
         elif index == 3: # left
-            range_relative = [0.0, rangex, 0.0]                                   
+            range_relative = [0.0, rangex, 0.0]
 
         return range_relative
     
