@@ -19,7 +19,7 @@ import numpy as np
 import math
 
 class DetectAndAvoid(Node):
-    def __init__(self):
+    def __init__(self, cf_num):
         super().__init__('detect_avoid',
             allow_undeclared_parameters=True,
             automatically_declare_parameters_from_overrides=True,)
@@ -31,7 +31,8 @@ class DetectAndAvoid(Node):
         self.ca_threshold1  = self.get_parameter('ca_threshold1').value
         self.ca_threshold2  = self.get_parameter('ca_threshold2').value
         self.avoidance_vel  = self.get_parameter('avoidance_vel').value
-        robot_prefix  = self.get_parameter('robot_prefix').value
+        robot_prefixes  = self.get_parameter('robot_prefix').value
+        robot_prefix = robot_prefixes[cf_num]
         
         # Publishers
         self.publisher_collision = self.create_publisher(
@@ -92,8 +93,8 @@ class DetectAndAvoid(Node):
         self.msg_wp = msg
         self.wp = msg.pose
         self.wp_inertial = [self.wp.x, self.wp.y, self.wp.z]
-        self.wp_relative, self.wp_relative_array = self.inertial2relative(self.wp_inertial)
-        self.wp_dist = float(np.linalg.norm(self.wp_relative_array))
+        self.wp_relative_array = self.inertial2relative(self.wp_inertial)
+        self.wp_dist = self.dist2pos(self.wp_relative_array)
 
     def inflight_callback(self, msg:InFlight):
         self.msg_inflight = msg
@@ -106,20 +107,27 @@ class DetectAndAvoid(Node):
             self.nearest_range = min(ranges)
             self.nearest_range_index = ranges.index(self.nearest_range)
             self.nearest_range_relative = self.range_relative(self.nearest_range, self.nearest_range_index)
-            self.nearest_range_inertial = self.relative2inertial(self.nearest_range_relative)        
+            self.nearest_range_inertial = self.relative2inertial(self.nearest_range_relative)
             if any(self.ca_choice == i for i in [self.repel_ca, self.repel_ca2, self.smooth_ca, self.apf_ca]):
                 self.nearest_relative = self.nearest_range_relative
                 self.nearest_inertial = self.nearest_range_inertial
                 self.nearest_dist = self.nearest_range
             else:
                 self.nearest_inertial, self.nearest_relative, self.nearest_dist = self.compare_nearest(self.nearest_range_inertial, self.nearest_inertial)
-                
+
             self.coll_check = self.nearest_dist <= self.ca_threshold2 # Collision check via nearest sensed obs pt.
 
             msg_collision = CollDetect()
             msg_collision.nearest = self.nearest_relative
-            if self.coll_check and self.msg_inflight.inflight:
-                self.get_logger().warn("Something in collision range.")
+            if self.coll_check:
+                self.get_logger().warn(f"Nearest collision point at [{self.nearest_dist}, {self.nearest_range_index}]")
+                self.get_logger().warn(f"Obs inertially at: " +
+                                       f"obs_x = {self.nearest_inertial[0]}, " +
+                                       f"obs_y = {self.nearest_inertial[1]}, ")
+                self.get_logger().info(f"CF position at: "+
+                                       f"cf_x = {self.cf_inertial[0]}, " + 
+                                       f"cf_y = {self.cf_inertial[1]}, " +
+                                       f"cf_z = {self.cf_inertial[2]}")
                 msg_collision.collision = True
             else:
                 msg_collision.collision = False
@@ -261,7 +269,7 @@ class DetectAndAvoid(Node):
         kr = 0.01 # 0.01
         ng = 2
         n = 2
-        do = self.ca_threshold2 # with ca1 = 0.1 and ca2 = 0.2
+        do = self.ca_threshold2 # with ca1 = 0.2 and ca2 = 0.4
         dr = max(min(self.nearest_dist, do), self.ca_threshold1)
         da = self.wp_dist
         unit_direction_nearest = np.array(self.nearest_relative) / dr
@@ -285,12 +293,12 @@ class DetectAndAvoid(Node):
             R_h = np.transpose(R_1)
             R_v = R_2
 
-        p_h = np.matmul(R_h, np.array(self.nearest_relative))
-        p_v = np.matmul(R_v, np.array(self.nearest_relative))
+        p_h = np.matmul(np.array(self.nearest_relative), R_h)
+        p_v = np.matmul(np.array(self.nearest_relative), R_v)
         p = np.array([alpha * p_h[0], 
                       alpha * p_h[1], 
                       (1-alpha) * p_v[2]])
-        unit_p = p / np.linalg.norm(p)
+        unit_p = p / max(min(self.dist2pos(p), self.nearest_dist), -self.nearest_dist)
         
         fa = ka * da * unit_direction_wp
         fr_o = -kr * (da**ng / dr**2) * (((1/dr) - (1/do))**(n-1)) * unit_p
@@ -303,6 +311,7 @@ class DetectAndAvoid(Node):
 
         response.new_hover = new_hover
 
+        self.get_logger().info(f"fc_x = {fc[0]}, fc_y = {fc[1]}")
         self.get_logger().info("APF CA engaged.")
         return response
     
@@ -327,16 +336,21 @@ class DetectAndAvoid(Node):
         return range_relative
     
     def compare_nearest(self, pos1, pos2): # Overwrites the nearest obs in memory
-        pos1_rel, pos1_rel_array = self.inertial2relative(pos1)
-        pos2_rel, pos2_rel_array = self.inertial2relative(pos2)
-        pos1_reldist = np.linalg.norm(pos1_rel_array)
-        pos2_reldist = np.linalg.norm(pos2_rel_array)
+        pos1_rel_array = self.inertial2relative(pos1)
+        pos2_rel_array = self.inertial2relative(pos2)
+        pos1_reldist = self.dist2pos(pos1_rel_array)
+        pos2_reldist = self.dist2pos(pos2_rel_array)
 
         if pos1_reldist < pos2_reldist:
-            return pos1, pos1_rel_array, float(pos1_reldist)
+            return pos1, pos1_rel_array, pos1_reldist
         else:
-            return pos2, pos2_rel_array, float(pos2_reldist)
-        
+            return pos2, pos2_rel_array, pos1_reldist
+
+    def dist2pos(self, pos):
+        pos_reldist = np.linalg.norm(pos)
+
+        return float(pos_reldist)
+    
     def smooth_vel_change(self, dist, m, c):
         v = m * dist + c
 
@@ -356,7 +370,7 @@ class DetectAndAvoid(Node):
         pos_rel.z = pos_rel_array[2]
         pos_rel.yaw = math.atan2(pos_rel.y, pos_rel.z)
 
-        return pos_rel, list(pos_rel_array)
+        return list(pos_rel_array)
 
     def relative2inertial(self, pos_rel): # assuming yaw is at zero
         pos_inertial_array = np.array([pos_rel[i] + self.cf_inertial[i] for i in range(len(self.cf_inertial))])
@@ -371,7 +385,8 @@ class DetectAndAvoid(Node):
 def main(args=None):
     rclpy.init(args=args)
 
-    detect_avoid = DetectAndAvoid()
+    cf_num = 0
+    detect_avoid = DetectAndAvoid(cf_num)
 
     rclpy.spin(detect_avoid)
 
