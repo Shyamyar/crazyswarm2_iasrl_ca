@@ -18,14 +18,13 @@ import tf_transformations
 import numpy as np
 
 class WaypointGenerator(Node,):
-    def __init__(self, cf_num):
+    def __init__(self):
         super().__init__('waypoint_gen',
             allow_undeclared_parameters=True,
             automatically_declare_parameters_from_overrides=True,)
         # self.declare_parameter('robot_prefix', '/cf2')
 
-        robot_prefixes  = self.get_parameter('robot_prefix').value
-        robot_prefix = robot_prefixes[cf_num]
+        robot_prefix  = self.get_parameter('robot_prefix').value
 
         # Publishers
         self.publisher_waypoint = self.create_publisher(
@@ -56,8 +55,16 @@ class WaypointGenerator(Node,):
 
         # Initializations
         self.waypoints = []
-        self.waypoints = [[ 1.0, 0.0, 0.5, 0.0],
-                          [-0.5, 0.0, 0.5, 0.0]]       
+        if robot_prefix == 'cf2':
+            self.waypoints = [[ 1.0, 0.0, 0.5, 0.0],
+                              [-0.5, 0.0, 0.5, 0.0]]
+        elif robot_prefix == 'cf1':
+            self.waypoints = [[ 0.25, 0.5, 0.5, 0.0],
+                              [ 0.25,-1.0, 0.5, 0.0]]
+        else:
+            self.waypoints = [[ 0.0, 0.0, 0.5, 0.0],
+                              [ 0.0, 0.0, 0.5, 0.0]]
+            self.waypoints = []
         self.num_wp = len(self.waypoints)
         self.waypoint_id = 0
         self.wp_reached = False
@@ -140,8 +147,7 @@ class WaypointGenerator(Node,):
 def main(args=None):
     rclpy.init(args=args)
 
-    cf_num = 0
-    waypoint_gen = WaypointGenerator(cf_num)
+    waypoint_gen = WaypointGenerator()
 
     rclpy.spin(waypoint_gen)
 

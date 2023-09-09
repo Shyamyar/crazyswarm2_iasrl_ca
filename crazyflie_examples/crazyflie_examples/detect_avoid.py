@@ -19,7 +19,7 @@ import numpy as np
 import math
 
 class DetectAndAvoid(Node):
-    def __init__(self, cf_num):
+    def __init__(self):
         super().__init__('detect_avoid',
             allow_undeclared_parameters=True,
             automatically_declare_parameters_from_overrides=True,)
@@ -31,8 +31,7 @@ class DetectAndAvoid(Node):
         self.ca_threshold1  = self.get_parameter('ca_threshold1').value
         self.ca_threshold2  = self.get_parameter('ca_threshold2').value
         self.avoidance_vel  = self.get_parameter('avoidance_vel').value
-        robot_prefixes  = self.get_parameter('robot_prefix').value
-        robot_prefix = robot_prefixes[cf_num]
+        robot_prefix  = self.get_parameter('robot_prefix').value
         
         # Publishers
         self.publisher_collision = self.create_publisher(
@@ -114,7 +113,7 @@ class DetectAndAvoid(Node):
             self.nearest_dist = self.dist2pos(self.nearest_relative) # Consider previous nearest
             # self.nearest_dist = self.nearest_range # Only consider sensed nearest
             if self.nearest_range <= self.nearest_dist:
-                self.get_logger().warn(f"Nearest range: [{self.nearest_range}, {self.nearest_range_index}].")
+                # self.get_logger().warn(f"Nearest range: [{self.nearest_range}, {self.nearest_range_index}].")
                 self.nearest_relative = self.nearest_range_relative
                 self.nearest_inertial = self.nearest_range_inertial
                 self.nearest_dist = self.nearest_range
@@ -396,8 +395,7 @@ class DetectAndAvoid(Node):
 def main(args=None):
     rclpy.init(args=args)
 
-    cf_num = 0
-    detect_avoid = DetectAndAvoid(cf_num)
+    detect_avoid = DetectAndAvoid()
 
     rclpy.spin(detect_avoid)
 

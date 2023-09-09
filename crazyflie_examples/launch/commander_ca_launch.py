@@ -41,11 +41,10 @@ def generate_launch_description():
 
     motion_capture_params = motion_capture["/motion_capture_tracking"]["ros__parameters"]
     motion_capture_params["rigid_bodies"] = dict()
-    enabled_cf = list()
     for key, value in crazyflies["robots"].items():
         type = crazyflies["robot_types"][value["type"]]
         if value["enabled"] and type["motion_capture"]["enabled"]:
-            enabled_cf.append(key)
+            enabled_cf = key # works for only one cf
             motion_capture_params["rigid_bodies"][key] =  {
                     "initial_position": value["initial_position"],
                     "marker": type["motion_capture"]["marker"],
@@ -72,6 +71,7 @@ def generate_launch_description():
             name='goal_commander',
             output='screen',
             parameters=[{"hover_height": 0.5},
+                        {"ca_on": True},
                         {"incoming_twist_topic": "/cmd_vel"},
                         {"robot_prefix": enabled_cf}]
         ),
