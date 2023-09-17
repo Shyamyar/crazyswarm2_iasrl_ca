@@ -41,49 +41,47 @@ def generate_launch_description():
 
     motion_capture_params = motion_capture["/motion_capture_tracking"]["ros__parameters"]
     motion_capture_params["rigid_bodies"] = dict()
-    enabled_cf = list()
     nodes = list()
     for key, value in crazyflies["robots"].items():
         type = crazyflies["robot_types"][value["type"]]
         if value["enabled"] and type["motion_capture"]["enabled"]:
-            enabled_cf.append(key)
             motion_capture_params["rigid_bodies"][key] =  {
                     "initial_position": value["initial_position"],
                     "marker": type["motion_capture"]["marker"],
                     "dynamics": type["motion_capture"]["dynamics"],
                 }
             
-    for cf in enabled_cf: # for multiple cf, multiple nodes
-        goal_commander_node = Node(
-                                package='crazyflie_examples',
-                                executable='goal_commander.py',
-                                name='goal_commander',
-                                output='screen',
-                                parameters=[{"hover_height": 0.5},
-                                            {"ca_on": True},
-                                            {"incoming_twist_topic": "/cmd_vel"},
-                                            {"robot_prefix": cf}]
-                                  )
-        detect_avoid_node = Node(
-                                package='crazyflie_examples',
-                                executable='detect_avoid.py',
-                                name='detect_avoid',
-                                output='screen',
-                                parameters=[{"ca_threshold1": 0.2},
-                                            {"ca_threshold2": 0.4},
-                                            {"avoidance_vel": 0.2},
-                                            {"robot_prefix": cf}]
-                                )
-        waypoint_gen_node = Node(
-                                package='crazyflie_examples',
-                                executable='waypoint_gen.py',
-                                name='waypoint_gen',
-                                output='screen',
-                                parameters=[{"robot_prefix": cf}]
-                                )
-        nodes.append(goal_commander_node)
-        nodes.append(detect_avoid_node)
-        nodes.append(waypoint_gen_node)
+            # for multiple cf, multiple nodes
+            goal_commander_node = Node(
+                                    package='crazyflie_examples',
+                                    executable='goal_commander.py',
+                                    name='goal_commander',
+                                    output='screen',
+                                    parameters=[{"hover_height": 0.5},
+                                                {"ca_on": value["ca_on"]},
+                                                {"incoming_twist_topic": "/cmd_vel"},
+                                                {"robot_prefix": key}]
+                                    )
+            detect_avoid_node = Node(
+                                    package='crazyflie_examples',
+                                    executable='detect_avoid.py',
+                                    name='detect_avoid',
+                                    output='screen',
+                                    parameters=[{"ca_threshold1": 0.2},
+                                                {"ca_threshold2": 0.4},
+                                                {"avoidance_vel": 0.2},
+                                                {"robot_prefix": key}]
+                                    )
+            waypoint_gen_node = Node(
+                                    package='crazyflie_examples',
+                                    executable='waypoint_gen.py',
+                                    name='waypoint_gen',
+                                    output='screen',
+                                    parameters=[{"robot_prefix": key}]
+                                    )
+            nodes.append(goal_commander_node)
+            nodes.append(detect_avoid_node)
+            nodes.append(waypoint_gen_node)
             
     # copy relevent settings to server params
     server_params[1]["poses_qos_deadline"] = motion_capture_params["topics"]["poses"]["qos"]["deadline"]
@@ -123,14 +121,15 @@ def generate_launch_description():
                         emulate_tty=True,
                         parameters=server_params
                     ),
-                    Node(
-                        package='rviz2',
-                        namespace='',
-                        executable='rviz2',
-                        name='rviz2',
-                        arguments=['-d' + os.path.join(get_package_share_directory('crazyflie'), 'config', 'config.rviz')],
-                        parameters=[{"use_sim_time": True}]
-                    )]
+                    # Node(
+                    #     package='rviz2',
+                    #     namespace='',
+                    #     executable='rviz2',
+                    #     name='rviz2',
+                    #     arguments=['-d' + os.path.join(get_package_share_directory('crazyflie'), 'config', 'config.rviz')],
+                    #     parameters=[{"use_sim_time": True}]
+                    # )
+                    ]
     
     all_nodes = nodes + other_nodes
 
