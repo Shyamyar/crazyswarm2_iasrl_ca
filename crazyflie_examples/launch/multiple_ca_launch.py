@@ -77,7 +77,8 @@ def generate_launch_description():
                                     executable='waypoint_gen.py',
                                     name='waypoint_gen',
                                     output='screen',
-                                    parameters=[{"robot_prefix": key}]
+                                    parameters=[{"robot_prefix": key},
+                                                {"waypoints": value["waypoints"]}]
                                     )
             nodes.append(goal_commander_node)
             nodes.append(detect_avoid_node)

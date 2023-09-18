@@ -23,8 +23,12 @@ class WaypointGenerator(Node,):
             allow_undeclared_parameters=True,
             automatically_declare_parameters_from_overrides=True,)
         # self.declare_parameter('robot_prefix', '/cf2')
+        # self.declare_parameter('waypoints', False)
 
-        robot_prefix  = self.get_parameter('robot_prefix').value
+        # Turn ROS parameters into a dictionary
+        self._ros_parameters = self._param_to_dict(self._parameters)
+        robot_prefix = self._ros_parameters["robot_prefix"]
+        waypoints = self._ros_parameters["waypoints"]
 
         # Publishers
         self.publisher_waypoint = self.create_publisher(
@@ -54,17 +58,12 @@ class WaypointGenerator(Node,):
         
 
         # Initializations
-        self.waypoints = []
-        if robot_prefix == 'cf2':
-            self.waypoints = [[ 1.0, 0.0, 0.5, 0.0],
-                              [-0.5, 0.0, 0.5, 0.0]]
-        elif robot_prefix == 'cf1':
-            self.waypoints = [[ 0.25, 0.5, 0.5, 0.0],
-                              [ 0.25,-1.0, 0.5, 0.0]]
-        else:
-            self.waypoints = [[ 0.0, 0.0, 0.5, 0.0],
-                              [ 0.0, 0.0, 0.5, 0.0]]
-            self.waypoints = []
+        self.waypoints = list()
+        if waypoints:
+            for key in waypoints:
+                wp = waypoints[key]
+                self.waypoints.append(wp)
+
         self.num_wp = len(self.waypoints)
         self.waypoint_id = 0
         self.wp_reached = False
@@ -142,6 +141,20 @@ class WaypointGenerator(Node,):
         self.msg_waypoint.wp_reached = self.wp_reached
         self.msg_waypoint.goal_reached = self.goal_reached
         self.publisher_waypoint.publish(self.msg_waypoint)
+
+    def _param_to_dict(self, param_ros):
+        """
+        Turn ROS 2 parameters from the node into a dict
+        """
+        tree = {}
+        for item in param_ros:
+            t = tree
+            for part in item.split('.'):
+                if part == item.split('.')[-1]:
+                    t = t.setdefault(part, param_ros[item].value)
+                else:
+                    t = t.setdefault(part, {})
+        return tree
 
     
 def main(args=None):

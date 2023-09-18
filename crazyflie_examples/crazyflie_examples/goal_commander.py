@@ -106,7 +106,7 @@ class GoalCommander(Node):
         self.VELOCITY = 0.2 # m/s
         self.TAKEOFFVELOCITY = 0.5 # m/s
         self.LANDVELOCITY = 0.02 # m/s
-        self.land_z = 0.1   # m
+        self.land_z = 0.05   # m
         self.z_limit = 2.0   # m
 
         self.msg_collision = CollDetect()

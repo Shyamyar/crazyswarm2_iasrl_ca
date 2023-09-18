@@ -111,7 +111,7 @@ class DetectAndAvoid(Node):
                 
             self.nearest_relative = self.inertial2relative(self.nearest_inertial)
             self.nearest_dist = self.dist2pos(self.nearest_relative) # Consider previous nearest
-            # self.nearest_dist = self.nearest_range # Only consider sensed nearest
+            self.nearest_dist = self.nearest_range # Only consider sensed nearest
             if self.nearest_range <= self.nearest_dist:
                 # self.get_logger().warn(f"Nearest range: [{self.nearest_range}, {self.nearest_range_index}].")
                 self.nearest_relative = self.nearest_range_relative
