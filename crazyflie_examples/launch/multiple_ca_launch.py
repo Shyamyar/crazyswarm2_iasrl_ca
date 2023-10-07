@@ -57,7 +57,7 @@ def generate_launch_description():
                                     executable='goal_commander.py',
                                     name='goal_commander',
                                     output='screen',
-                                    parameters=[{"hover_height": 0.5},
+                                    parameters=[{"hover_height": value["hover_height"]},
                                                 {"ca_on": value["ca_on"]},
                                                 {"incoming_twist_topic": "/cmd_vel"},
                                                 {"robot_prefix": key}]
@@ -69,7 +69,7 @@ def generate_launch_description():
                                     output='screen',
                                     parameters=[{"ca_threshold1": 0.2},
                                                 {"ca_threshold2": 0.4},
-                                                {"avoidance_vel": 0.2},
+                                                {"avoidance_vel": 0.15},
                                                 {"robot_prefix": key}]
                                     )
             waypoint_gen_node = Node(

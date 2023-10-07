@@ -103,7 +103,7 @@ class GoalCommander(Node):
         self.command_goto = False
         self.command_land = False
         self.in_goto_mode = False
-        self.VELOCITY = 0.2 # m/s
+        self.VELOCITY = 0.18 # m/s
         self.TAKEOFFVELOCITY = 0.5 # m/s
         self.LANDVELOCITY = 0.02 # m/s
         self.land_z = 0.05   # m
