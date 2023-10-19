@@ -1,17 +1,14 @@
 # named list of all robots
 robots:
-  cf1: # yellow
-    enabled: true
-    uri: radio://0/80/2M/E7E7E7E7E7
-    initial_position: [0, 0.5, 0]
+  cf5: # black+blue
+    enabled: false
+    uri: radio://0/80/2M/E7E7E7E7E5
+    initial_position: [0, 0, 0]
     type: cf21  # see robot_types
-    ca_on: true
+    ca_on: false
     hover_height: 0.5
     waypoints: #false
-      wp0: [ 0.25, 0.5, 0.5, 0.0]
-      wp1: [ 0.25,-1.0, 0.5, 0.0]
-      # wp0: [-0.50, 1.0, 0.5, 0.0]
-      # wp1: [ 0.25,-1.0, 0.5, 0.0]
+      wp0: [-0.75, 0.25, 0.0, 0.0, 1]
     # firmware_params:
     #   kalman:
     #     pNAcc_xy: 1.0 # default 0.5
@@ -21,7 +18,7 @@ robots:
     #     topic_name3: 
     #       frequency: 1
     #       vars: ["acc.x", "acc.y"]
-  cf2: # green
+  cf6: # green
     enabled: true
     uri: radio://0/80/2M/E7E7E7E7E6
     initial_position: [0, 0, 0]
@@ -29,8 +26,65 @@ robots:
     ca_on: true
     hover_height: 0.5
     waypoints: #false
-      wp0: [ 1.0, 0.0, 0.5, 0.0]
-      wp1: [-0.5, 0.0, 0.5, 0.0]
+      # wp0: [-0.5,-0.75, 0.0, 0.0, 1]
+      wp0: [ 1.0, 0.0, 0.5, 0.0, 0]
+      wp1: [-0.5, 0.0, 0.5, 0.0, 0]
+    # firmware_params:
+    #   kalman:
+    #     pNAcc_xy: 1.0 # default 0.5
+    # firmware_logging:
+    #   enabled: true
+    #   custom_topics:
+    #     topic_name3: 
+    #       frequency: 1
+    #       vars: ["acc.x", "acc.y"]
+  cf7: # yellow
+    enabled: true
+    uri: radio://0/80/2M/E7E7E7E7E7
+    initial_position: [0, 0, 0]
+    type: cf21  # see robot_types
+    ca_on: true
+    hover_height: 0.5
+    waypoints: #false
+      # wp0: [ 0.5,-0.75, 0.0, 0.0, 1]
+      wp0: [ 0.25, 0.5, 0.5, 0.0, 0]
+      wp1: [ 0.25,-1.0, 0.5, 0.0, 0]
+      # wp0: [-0.50, 1.0, 0.5, 0.0, 0]
+      # wp1: [ 0.25,-1.0, 0.5, 0.0, 0]
+    # firmware_params:
+    #   kalman:
+    #     pNAcc_xy: 1.0 # default 0.5
+    #firmware_logging:
+    #  custom_topics:
+    #    topic_name3: 
+    #      frequency: 1
+    #      vars: ["acc.x", "acc.y", "acc.z"]
+  cf8: # black
+    enabled: false
+    uri: radio://0/80/2M/E7E7E7E7E8
+    initial_position: [0, 0, 0]
+    type: cf21  # see robot_types
+    ca_on: false
+    hover_height: 0.5
+    waypoints: #false
+      wp0: [ 0.75, 0.25, 0.0, 0.0, 1]
+    # firmware_params:
+    #   kalman:
+    #     pNAcc_xy: 1.0 # default 0.5
+    #firmware_logging:
+    #  custom_topics:
+    #    topic_name3: 
+    #      frequency: 1
+    #      vars: ["acc.x", "acc.y", "acc.z"]
+  cf9: # blue
+    enabled: false
+    uri: radio://0/80/2M/E7E7E7E7E9
+    initial_position: [0, 0, 0]
+    type: cf21  # see robot_types
+    ca_on: false
+    hover_height: 0.5
+    waypoints: #false
+      wp0: [ 0.0, 1.0, 0.0, 0.0, 1]
     # firmware_params:
     #   kalman:
     #     pNAcc_xy: 1.0 # default 0.5

@@ -31,6 +31,7 @@ class DetectAndAvoid(Node):
         self.ca_threshold1  = self.get_parameter('ca_threshold1').value
         self.ca_threshold2  = self.get_parameter('ca_threshold2').value
         self.avoidance_vel  = self.get_parameter('avoidance_vel').value
+        self.ca_on  = self.get_parameter('ca_on').value
         robot_prefix  = self.get_parameter('robot_prefix').value
         
         # Publishers
@@ -102,7 +103,7 @@ class DetectAndAvoid(Node):
         self.msg_scan = msg
         ranges = list(msg.ranges)
         
-        if self.msg_inflight.inflight:
+        if self.msg_inflight.inflight and self.ca_on:
             nearest_range = min(ranges)
             self.nearest_range = max(nearest_range, self.msg_scan.range_min) # Avoid zero division error
             self.nearest_range_index = ranges.index(nearest_range)
@@ -117,13 +118,6 @@ class DetectAndAvoid(Node):
                 self.nearest_relative = self.nearest_range_relative
                 self.nearest_inertial = self.nearest_range_inertial
                 self.nearest_dist = self.nearest_range
-
-            # if any(self.ca_choice == i for i in [self.repel_ca, self.repel_ca2, self.smooth_ca, self.apf_ca]):
-            #     self.nearest_relative = self.nearest_range_relative
-            #     self.nearest_inertial = self.nearest_range_inertial
-            #     self.nearest_dist = self.nearest_range
-            # else:
-            #     self.nearest_inertial, self.nearest_relative, self.nearest_dist = self.compare_nearest(self.nearest_range_inertial, self.nearest_inertial)
 
             self.coll_check = self.nearest_dist <= self.ca_threshold2 # Collision check via nearest obs pt.
 
@@ -220,47 +214,9 @@ class DetectAndAvoid(Node):
         y = self.nearest_relative[1] # y axis, - is right, + is left
         theta = math.atan2(y, x)
 
-        # Method 1 - oscillating in one position (local minima situation)
-        # new_hover.vx = float(np.sign(x)) * axial_speed
-        # new_hover.vy = float(np.sign(y)) * lateral_speed
-
-        # Method 2 - better with 3, than 1 and 3 standalone or combined
-        # if x < 0: # back
-        #     new_hover.vx = float(np.sign(x)) * axial_speed
-        #     new_hover.vy = float(np.sign(self.wp.y)) * lateral_speed
-        # if y < 0: # right
-        #     new_hover.vx = float(np.sign(self.wp.x)) * lateral_speed
-        #     new_hover.vy = float(np.sign(y)) * axial_speed
-        # if x > 0: # front
-        #     new_hover.vx = float(np.sign(x)) * axial_speed
-        #     new_hover.vy = float(np.sign(self.wp.y)) * lateral_speed
-        # if y > 0: # left
-        #     new_hover.vx = float(np.sign(self.wp.x)) * lateral_speed
-        #     new_hover.vy = float(np.sign(y)) * axial_speed
-
-        # Method 3 (with 1) - Better than just 1 (still has certain local minimum situations)
-        # if abs(x) < abs(y):
-        #     new_hover.vy = float(np.sign(self.wp.y)) * lateral_speed
-        # else:
-        #     new_hover.vx = float(np.sign(self.wp.x)) * lateral_speed
-
         # Method 4 - makes circles around the obstacle, performs well.
         new_hover.vx = self.avoidance_vel * math.cos(theta - math.pi/2)
         new_hover.vy = self.avoidance_vel * math.sin(theta - math.pi/2)
-
-        # # Method 5 - Similar to smooth_ca but with nearest obstacle in memory 
-        # if abs(x) < abs(y) and x < 0: # back
-        #     new_hover.vx = -axial_speed
-        #     new_hover.vy = -lateral_speed
-        # if abs(y) < abs(x) and y < 0: # right
-        #     new_hover.vx = lateral_speed
-        #     new_hover.vy = -axial_speed
-        # if abs(x) < abs(y) and x > 0: # front
-        #     new_hover.vx = axial_speed
-        #     new_hover.vy = lateral_speed
-        # if abs(y) < abs(x) and y > 0: # left
-        #     new_hover.vx = -lateral_speed
-        #     new_hover.vy = axial_speed
 
         response.new_hover = new_hover
 

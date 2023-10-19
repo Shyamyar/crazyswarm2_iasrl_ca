@@ -13,7 +13,7 @@ import rclpy
 from rclpy.node import Node
 
 from geometry_msgs.msg import Twist
-from crazyflie_interfaces.srv import Takeoff, Land, GoTo, NotifySetpointsStop, CA, InitiateWayPoint, ChangeWayPoint
+from crazyflie_interfaces.srv import Takeoff, Land, GoTo, NotifySetpointsStop, CA, ChangeWayPoint
 from crazyflie_interfaces.msg import Hover, CollDetect, WayPoint, InFlight
 from geometry_msgs.msg import PoseStamped
 from functools import partial
@@ -84,9 +84,9 @@ class GoalCommander(Node):
         self.ca_client = self.create_client(
             CA, 
             robot_prefix + '/ca')
-        self.init_wp_client = self.create_client(
-            InitiateWayPoint, 
-            robot_prefix + '/init_wp')
+        # self.init_wp_client = self.create_client(
+        #     ChangeWayPoint, 
+        #     robot_prefix + '/init_wp')
         self.change_wp_client = self.create_client(
             ChangeWayPoint, 
             robot_prefix + '/change_wp')
@@ -104,7 +104,7 @@ class GoalCommander(Node):
         self.command_land = False
         self.in_goto_mode = False
         self.VELOCITY = 0.18 # m/s
-        self.TAKEOFFVELOCITY = 0.5 # m/s
+        self.TAKEOFFVELOCITY = 0.8 # m/s
         self.LANDVELOCITY = 0.02 # m/s
         self.land_z = 0.05   # m
         self.z_limit = 2.0   # m
@@ -124,7 +124,7 @@ class GoalCommander(Node):
             self.get_logger().warn("Waiting for GoTo Service...")
         while not self.notifysps_client.wait_for_service():
             self.get_logger().warn("Waiting for NotifySetpointsStop Service...")
-        while not self.init_wp_client.wait_for_service():
+        while not self.change_wp_client.wait_for_service():
             self.get_logger().warn("Waiting for Initiate Waypoint Service...")
 
         self.get_logger().info(f"Goal Commander set for {robot_prefix}")
@@ -173,16 +173,18 @@ class GoalCommander(Node):
             self.msg_hover.z_distance = self.hover_height
             self.inflight = True
             time.sleep(2.0)
+            req = ChangeWayPoint.Request()
+            req.wp_id = 0
+            self.change_wp_client.call_async(req)
+            self.command_goto = True
+            # self.first_waypoint = True
 
-            if self.msg_waypoint.num > 0:
-                req = InitiateWayPoint.Request()
-                req.wp_id = 0
-                self.init_wp_client.call_async(req)
-                self.command_goto = True
-                self.first_waypoint = True
-            else:
-                self.command_goto = False
-                self.first_waypoint = False
+            # if self.msg_waypoint.num > 0:
+            #     self.command_goto = True
+            #     self.first_waypoint = True
+            # else:
+            #     self.command_goto = False
+            #     self.first_waypoint = False
 
         if self.cf_has_taken_off:
             # random waypoint check
@@ -228,13 +230,13 @@ class GoalCommander(Node):
                     self.notifysps_client.call_async(req)
                     self.command_goto = True
             
-            if self.command_goto or (self.msg_waypoint.wp_reached and not self.msg_waypoint.goal_reached):
+            if (self.command_goto and self.msg_waypoint.num > 0) or (self.msg_waypoint.wp_reached and not self.msg_waypoint.goal_reached):
                 if self.msg_waypoint.wp_reached:
                     req = ChangeWayPoint.Request()
-                    req.wp_id = self.msg_waypoint.wp_id
+                    req.wp_id = self.msg_waypoint.wp_id + 1
                     self.change_wp_client.call_async(req)
                     self.command_goto = True
-                    self.first_waypoint = False
+                    # self.first_waypoint = False
                 else:
                     req = GoTo.Request()
                     req.goal.x = self.msg_waypoint.pose.x
@@ -250,7 +252,7 @@ class GoalCommander(Node):
                     self.command_stopandhover = False
                     self.in_goto_mode = True
             
-            if self.command_land or (self.msg_waypoint.goal_reached and not self.first_waypoint):
+            if self.command_land or self.msg_waypoint.goal_reached:# or not self.msg_waypoint.num:
                 self.in_goto_mode = False
                 land_height = self.land_z
                 land_duration = land_height / self.LANDVELOCITY

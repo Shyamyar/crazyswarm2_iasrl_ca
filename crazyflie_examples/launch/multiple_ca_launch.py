@@ -69,7 +69,8 @@ def generate_launch_description():
                                     output='screen',
                                     parameters=[{"ca_threshold1": 0.2},
                                                 {"ca_threshold2": 0.4},
-                                                {"avoidance_vel": 0.15},
+                                                {"avoidance_vel": 0.18},
+                                                {"ca_on": value["ca_on"]},
                                                 {"robot_prefix": key}]
                                     )
             waypoint_gen_node = Node(

@@ -40,7 +40,6 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/RemoveLogging.srv"
   "srv/AddLogging.srv"
   "srv/CA.srv"
-  "srv/InitiateWayPoint.srv"
   "srv/ChangeWayPoint.srv"
 
   DEPENDENCIES builtin_interfaces geometry_msgs std_msgs 
