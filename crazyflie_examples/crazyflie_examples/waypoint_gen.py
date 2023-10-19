@@ -47,10 +47,6 @@ class WaypointGenerator(Node,):
 
 
         # Services
-        # self.create_service(
-        #     ChangeWayPoint,
-        #     robot_prefix + "/init_wp", 
-        #     partial(self.initiate_waypoint_callback))
         self.create_service(
             ChangeWayPoint,
             robot_prefix + "/change_wp", 
@@ -104,16 +100,6 @@ class WaypointGenerator(Node,):
             self.get_logger().info("Waypoints unavailable...")
 
         return response
-
-    # def initiate_waypoint_callback(self, request, response):
-    #     self.get_logger().info("Initiating Waypoints with waypoint " + 
-    #                            f"{request.wp_id}")
-    #     self.waypoint_id = request.wp_id
-    #     self.wp_reached = False
-    #     self.goal_reached = False
-
-    #     self.publish_waypoint_msg()
-    #     return response
     
     def publish_waypoint_msg(self):
         self.msg_waypoint = WayPoint()

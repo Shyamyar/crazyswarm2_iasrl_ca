@@ -84,9 +84,6 @@ class GoalCommander(Node):
         self.ca_client = self.create_client(
             CA, 
             robot_prefix + '/ca')
-        # self.init_wp_client = self.create_client(
-        #     ChangeWayPoint, 
-        #     robot_prefix + '/init_wp')
         self.change_wp_client = self.create_client(
             ChangeWayPoint, 
             robot_prefix + '/change_wp')
@@ -177,14 +174,6 @@ class GoalCommander(Node):
             req.wp_id = 0
             self.change_wp_client.call_async(req)
             self.command_goto = True
-            # self.first_waypoint = True
-
-            # if self.msg_waypoint.num > 0:
-            #     self.command_goto = True
-            #     self.first_waypoint = True
-            # else:
-            #     self.command_goto = False
-            #     self.first_waypoint = False
 
         if self.cf_has_taken_off:
             # random waypoint check
@@ -236,7 +225,6 @@ class GoalCommander(Node):
                     req.wp_id = self.msg_waypoint.wp_id + 1
                     self.change_wp_client.call_async(req)
                     self.command_goto = True
-                    # self.first_waypoint = False
                 else:
                     req = GoTo.Request()
                     req.goal.x = self.msg_waypoint.pose.x

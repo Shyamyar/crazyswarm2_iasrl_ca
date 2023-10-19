@@ -301,17 +301,6 @@ class DetectAndAvoid(Node):
 
         return range_relative
     
-    def compare_nearest(self, pos1, pos2): # Overwrites the nearest obs in memory
-        pos1_rel_array = self.inertial2relative(pos1)
-        pos2_rel_array = self.inertial2relative(pos2)
-        pos1_reldist = self.dist2pos(pos1_rel_array)
-        pos2_reldist = self.dist2pos(pos2_rel_array)
-
-        if pos1_reldist < pos2_reldist:
-            return pos1, pos1_rel_array, pos1_reldist
-        else:
-            return pos2, pos2_rel_array, pos1_reldist
-
     def dist2pos(self, pos):
         pos_reldist = np.linalg.norm(pos)
 
