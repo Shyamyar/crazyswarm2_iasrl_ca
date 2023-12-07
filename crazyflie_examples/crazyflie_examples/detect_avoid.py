@@ -93,8 +93,6 @@ class DetectAndAvoid(Node):
         self.msg_wp = msg
         self.wp = msg.pose
         self.wp_inertial = [self.wp.x, self.wp.y, self.wp.z]
-        self.wp_relative_array = self.inertial2relative(self.wp_inertial)
-        self.wp_dist = self.dist2pos(self.wp_relative_array)
 
     def inflight_callback(self, msg:InFlight):
         self.msg_inflight = msg
@@ -119,7 +117,7 @@ class DetectAndAvoid(Node):
                 self.nearest_inertial = self.nearest_range_inertial
                 self.nearest_dist = self.nearest_range
 
-            self.coll_check = self.nearest_dist <= self.ca_threshold2 # Collision check via nearest obs pt.
+            self.coll_check = self.nearest_dist <= self.ca_threshold2 and self.nearest_range_index == 2 # Collision check via nearest obs pt.
 
             msg_collision = CollDetect()
             msg_collision.nearest = self.nearest_relative
@@ -229,19 +227,22 @@ class DetectAndAvoid(Node):
         new_hover = self.set_hover_z(new_hover)
         x = self.nearest_relative[0] # x axis, - is back, + is front
         y = self.nearest_relative[1] # y axis, - is right, + is left
-        rho_h = math.atan2(abs(y), x)
+        z = self.nearest_relative[2] # z axis, - is down, + is up
+        wp_relative_array = self.inertial2relative(self.wp_inertial)
+        wp_dist = self.dist2pos(wp_relative_array)
+        rho_h = math.atan2(y, x)
+        rho_v = math.atan2(z, x)
 
-        ka = 0.3 # 0.3
+        ka = 0.2 # 0.3
         kr = 0.01 # 0.01
         ng = 2
-        n = 2
         do = self.ca_threshold2 # with ca1 = 0.2 and ca2 = 0.4
         dr = max(min(self.nearest_dist, do), self.ca_threshold1)
-        da = self.wp_dist
+        da = wp_dist
         unit_direction_nearest = np.array(self.nearest_relative) / dr
-        unit_direction_wp = np.array(self.wp_relative_array) / da
+        unit_direction_wp = np.array(wp_relative_array) / da
         
-        gamma = math.pi / 4
+        gamma = math.pi / 3
         alpha = 1
 
         R_1 = np.array([[np.cos(gamma),-np.sin(gamma), 0],
@@ -259,6 +260,11 @@ class DetectAndAvoid(Node):
             R_h = np.transpose(R_1)
             R_v = R_2
 
+        if rho_v >= 0:
+            R_v = R_2
+        else:
+            R_v = np.transpose(R_2)
+
         p_h = np.matmul(np.array(self.nearest_relative), R_h)
         p_v = np.matmul(np.array(self.nearest_relative), R_v)
         p = np.array([alpha * p_h[0], 
@@ -267,8 +273,8 @@ class DetectAndAvoid(Node):
         unit_p = p / max(min(self.dist2pos(p), self.nearest_dist), -self.nearest_dist)
         
         fa = ka * da * unit_direction_wp
-        fr_o = -(1/2) * kr * (da**ng / dr**2) * n * (((1/dr) - (1/do))**(n-1)) * unit_p
-        fr_g = -(1/2) * kr * ng * da**(ng-1)  * (((1/dr) - (1/do))**n) * unit_direction_wp
+        fr_o = - kr * (da**ng / dr**2) * ((1/dr) - (1/do)) * unit_p
+        fr_g = (1/2) * kr * ng * da**(ng-1)  * (((1/dr) - (1/do))**2) * unit_direction_wp
         fr = fr_o + fr_g
         fc = fa + fr
 
@@ -277,8 +283,7 @@ class DetectAndAvoid(Node):
 
         response.new_hover = new_hover
 
-        self.get_logger().info(f"fc_x = {fc[0]}, fc_y = {fc[1]}")
-        self.get_logger().info("APF CA engaged.")
+        self.get_logger().info(f"APF CA engaged with: fc_x = {fc[0]}, fc_y = {fc[1]}")
         return response
     
     def set_hover_z(self, msg_hover: Hover):
@@ -323,7 +328,7 @@ class DetectAndAvoid(Node):
         pos_rel.x = pos_rel_array[0]
         pos_rel.y = pos_rel_array[1]
         pos_rel.z = pos_rel_array[2]
-        pos_rel.yaw = math.atan2(pos_rel.y, pos_rel.z)
+        pos_rel.yaw = math.atan2(pos_rel.y, pos_rel.x)
 
         return list(pos_rel_array)
 
@@ -333,7 +338,7 @@ class DetectAndAvoid(Node):
         pos_inertial.x = pos_inertial_array[0]
         pos_inertial.y = pos_inertial_array[1]
         pos_inertial.z = pos_inertial_array[2]
-        pos_inertial.yaw = math.atan2(pos_inertial.y, pos_inertial.z)
+        pos_inertial.yaw = math.atan2(pos_inertial.y, pos_inertial.x)
 
         return list(pos_inertial_array)
 
