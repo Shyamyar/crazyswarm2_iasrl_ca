@@ -86,7 +86,7 @@ class WaypointGenerator(Node,):
         self.get_logger().info(f"Requesting waypoint {self.waypoint_id}...")
         if self.num_wp > 0:
             self.wp_initiated = True
-            if self.waypoints[self.waypoint_id][4] == 1:
+            if self.waypoints[self.waypoint_id][4] == 1: # check if relative
                 self.wp_x = self.cf_x + self.waypoints[self.waypoint_id][0]
                 self.wp_y = self.cf_y + self.waypoints[self.waypoint_id][1]
                 self.wp_z = self.cf_z + self.waypoints[self.waypoint_id][2]
@@ -112,11 +112,6 @@ class WaypointGenerator(Node,):
             self.wp_reached = self.reldist <= self.reldist_th    
             self.goal_reached = self.waypoint_id == self.num_wp - 1 and self.wp_reached
             self.waypoint_id = max(min(self.waypoint_id, self.num_wp - 1),0)
-
-            if self.goal_reached:
-                self.get_logger().info("Goal Reached.")
-            elif self.wp_reached:
-                self.get_logger().info("Waypoint Reached.")
 
             self.msg_waypoint.num = self.num_wp
             self.msg_waypoint.wp_id = self.waypoint_id

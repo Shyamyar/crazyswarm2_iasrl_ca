@@ -93,7 +93,6 @@ class GoalCommander(Node):
 
         # Initializations
         self.msg_hover = Hover()
-        self.inflight = False
         self.cf_has_taken_off = False
         self.command_hover = False
         self.command_takeoff = False
@@ -130,7 +129,7 @@ class GoalCommander(Node):
         self.msg_pose = msg
         self.z_position = msg.pose.position.z
         msg_inflight = InFlight()
-        msg_inflight.inflight = self.inflight
+        msg_inflight.inflight = self.cf_has_taken_off
         self.publisher_inflight.publish(msg_inflight)
 
     def coll_detect_callback(self, msg:CollDetect):
@@ -157,6 +156,7 @@ class GoalCommander(Node):
             self.msg_hover.z_distance = self.z_position
 
     def timer_callback(self):
+        # Takeoff related
         if self.command_takeoff and not self.cf_has_taken_off:
             req = Takeoff.Request()
             req.height = self.hover_height
@@ -168,21 +168,14 @@ class GoalCommander(Node):
             self.cf_has_taken_off = True
             self.command_stopandhover = False
             self.msg_hover.z_distance = self.hover_height
-            self.inflight = True
             time.sleep(2.0)
             req = ChangeWayPoint.Request()
             req.wp_id = 0
             self.change_wp_client.call_async(req)
             self.command_goto = True
 
-        if self.cf_has_taken_off:
-            # random waypoint check
-            # self.msg_waypoint.wp_reached = rd.choice([True] + [False] * 20)
-            # if self.msg_waypoint.wp_reached:
-            #     self.msg_waypoint.goal_reached = rd.choice([True] + [False] * 2)
-            #     if self.msg_waypoint.goal_reached:
-            #         self.get_logger().info("Goal Reached.")
-
+        if self.cf_has_taken_off and not self.command_land:
+            # Hover related
             if self.msg_collision.collision and self.ca_on:
                 self.in_goto_mode = False
                 req = CA.Request()
@@ -219,38 +212,45 @@ class GoalCommander(Node):
                     self.notifysps_client.call_async(req)
                     self.command_goto = True
             
-            if (self.command_goto and self.msg_waypoint.num > 0) or (self.msg_waypoint.wp_reached and not self.msg_waypoint.goal_reached):
-                if self.msg_waypoint.wp_reached:
-                    req = ChangeWayPoint.Request()
-                    req.wp_id = self.msg_waypoint.wp_id + 1
-                    self.change_wp_client.call_async(req)
-                    self.command_goto = True
-                else:
-                    req = GoTo.Request()
-                    req.goal.x = self.msg_waypoint.pose.x
-                    req.goal.y = self.msg_waypoint.pose.y
-                    req.goal.z = self.msg_waypoint.pose.z
-                    req.yaw = self.msg_waypoint.pose.yaw
-                    goto_duration = self.msg_waypoint.reldist / self.VELOCITY
-                    req.duration = rclpy.duration.Duration(seconds=goto_duration).to_msg()
-                    self.get_logger().info("Requesting GoTo...")
-                    self.goto_client.call_async(req)
-                    self.command_goto = False
-                    self.command_hover = False
-                    self.command_stopandhover = False
-                    self.in_goto_mode = True
+            # Waypoint related
+            if self.command_goto and self.msg_waypoint.num > 0:
+                req = GoTo.Request()
+                req.goal.x = self.msg_waypoint.pose.x
+                req.goal.y = self.msg_waypoint.pose.y
+                req.goal.z = self.msg_waypoint.pose.z
+                req.yaw = self.msg_waypoint.pose.yaw
+                goto_duration = self.msg_waypoint.reldist / self.VELOCITY
+                req.duration = rclpy.duration.Duration(seconds=goto_duration).to_msg()
+                self.get_logger().info("Requesting GoTo...")
+                self.goto_client.call_async(req)
+                self.command_goto = False
+                self.command_hover = False
+                self.command_stopandhover = False
+                self.in_goto_mode = True
             
-            if self.command_land or self.msg_waypoint.goal_reached:# or not self.msg_waypoint.num:
-                self.in_goto_mode = False
-                land_height = self.land_z
-                land_duration = land_height / self.LANDVELOCITY
-                req = Land.Request()
-                req.height = land_height
-                req.duration = rclpy.duration.Duration(seconds=land_duration).to_msg()
-                self.get_logger().info("Requesting Land...")
-                self.land_client.call_async(req)
-                self.cf_has_taken_off = False
-                self.inflight = False
+            elif self.msg_waypoint.wp_reached and not self.msg_waypoint.goal_reached:
+                self.get_logger().info("Waypoint Reached.")
+                req = ChangeWayPoint.Request()
+                req.wp_id = self.msg_waypoint.wp_id + 1
+                self.change_wp_client.call_async(req)
+                self.command_goto = True
+
+            elif self.msg_waypoint.goal_reached:
+                self.get_logger().info("Goal Reached.")
+                self.command_land = True
+
+        # Landing related    
+        if self.command_land:# or not self.msg_waypoint.num:
+            self.in_goto_mode = False
+            land_height = self.land_z
+            land_duration = land_height / self.LANDVELOCITY
+            req = Land.Request()
+            req.height = land_height
+            req.duration = rclpy.duration.Duration(seconds=land_duration).to_msg()
+            self.get_logger().info("Requesting Land...")
+            self.land_client.call_async(req)
+            self.cf_has_taken_off = False
+            self.command_land = False
 
     def set_zero_hover(self, msg:Hover):
         msg.vx = 0.0

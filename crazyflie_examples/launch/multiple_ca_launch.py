@@ -50,7 +50,7 @@ def generate_launch_description():
                     "marker": type["motion_capture"]["marker"],
                     "dynamics": type["motion_capture"]["dynamics"],
                 }
-            
+        if value["enabled"]:    
             # for multiple cf, multiple nodes
             goal_commander_node = Node(
                                     package='crazyflie_examples',
